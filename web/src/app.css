@@ -1,0 +1,115 @@
+/* Factory dashboard: a quiet control room. Near-black neutrals, hairline borders, one ink for actions, and
+   status colours that each mean one thing: green = running or fine, amber = waiting on you, red = failed
+   or over a limit, blue = queued, links and focus. Type is IBM Plex Sans and Plex Mono (self-hosted).
+   Themes: Dark (default), Light, and System (follows the OS). The old token names (--violet, --teal, ...)
+   stay so every view picks the new colours up: violet = blue (queued), teal = green, pink = rose. */
+:root, [data-theme="midnight"] {
+  --bg: #0b0b0c; --bg-2: #111113; --panel: #151517; --panel-2: #1b1b1e; --line: #25252a; --line-2: #313137;
+  --ink: #ededee; --ink-2: #b5b5bb; --muted: #84848c;
+  --run: #46c37b; --wait: #e9a23b; --fail: #ef5b5b; --queue: #6fa3ff; --rose: #e57c96;
+  --on-ink: #0b0b0c;
+  color-scheme: dark;
+}
+[data-theme="daylight"] {
+  --bg: #f3f3f1; --bg-2: #fafaf9; --panel: #ffffff; --panel-2: #f5f5f3; --line: #e3e3df; --line-2: #d3d3ce;
+  --ink: #18181a; --ink-2: #44444a; --muted: #6c6c73;
+  --run: #18864a; --wait: #a86500; --fail: #c93636; --queue: #2f62d6; --rose: #b8456a;
+  --on-ink: #ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg: #f3f3f1; --bg-2: #fafaf9; --panel: #ffffff; --panel-2: #f5f5f3; --line: #e3e3df; --line-2: #d3d3ce;
+    --ink: #18181a; --ink-2: #44444a; --muted: #6c6c73;
+    --run: #18864a; --wait: #a86500; --fail: #c93636; --queue: #2f62d6; --rose: #b8456a;
+    --on-ink: #ffffff;
+    color-scheme: light;
+  }
+}
+:root {
+  --violet: var(--queue); --teal: var(--run); --amber: var(--wait); --red: var(--fail); --pink: var(--rose);
+  --accent: var(--queue);
+  --chart-1: var(--queue); --chart-2: var(--run);
+  --radius: 10px;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "Cascadia Code", Consolas, monospace;
+  --side: 216px;
+  --shadow: none;
+}
+
+* { box-sizing: border-box; }
+html { scrollbar-gutter: stable; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 13.5px/1.5 var(--sans); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+a { color: inherit; text-decoration: none; }
+a:hover { color: var(--queue); }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--queue); outline-offset: 2px; border-radius: 6px; }
+::selection { background: color-mix(in srgb, var(--queue) 35%, transparent); }
+.num { font-family: var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+.muted { color: var(--muted); }
+.small { font-size: 12.5px; }
+.mono { font-family: var(--mono); }
+
+/* Buttons: plain by default, ink for the one thing to do, quiet for the rest. */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: 1px solid var(--line-2); background: var(--panel); color: var(--ink);
+  border-radius: 7px; padding: 4px 11px; font-size: 12.5px; font-weight: 500; cursor: pointer; white-space: nowrap; line-height: 20px;
+  transition: background .12s, border-color .12s;
+}
+.btn:hover { background: var(--panel-2); border-color: color-mix(in srgb, var(--ink) 25%, var(--line-2)); color: var(--ink); }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.btn.primary:hover { background: color-mix(in srgb, var(--ink) 86%, var(--bg)); color: var(--on-ink); }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover { color: var(--ink); background: var(--panel-2); }
+.btn.sm { padding: 2px 8px; font-size: 12px; border-radius: 6px; line-height: 18px; }
+.field { background: var(--bg-2); border: 1px solid var(--line-2); color: var(--ink); border-radius: 7px; padding: 4px 9px; font-size: 13px; }
+.field:focus { border-color: var(--queue); outline: none; }
+
+/* Chips: a word with a status colour, never a coloured block. */
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 5px; padding: 0 6px; font-size: 11.5px; font-weight: 500; color: var(--ink-2); border: 1px solid var(--line); white-space: nowrap; line-height: 18px; }
+.chip.p1, .chip.bad { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 40%, var(--line)); }
+.chip.p2 { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 40%, var(--line)); }
+.chip.live { color: var(--run); border-color: color-mix(in srgb, var(--run) 40%, var(--line)); }
+.chip.bot { color: var(--queue); border-color: color-mix(in srgb, var(--queue) 40%, var(--line)); }
+.chip.site { color: var(--ink-2); border-style: dashed; }
+.chip.pink { color: var(--wait); border-color: color-mix(in srgb, var(--wait) 40%, var(--line)); }
+
+/* Panels: one flat surface with a hairline, no glow, no nesting tricks. */
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px 0; min-height: 40px; }
+.panel-head h2 { margin: 0; font-size: 13px; font-weight: 600; color: var(--ink); letter-spacing: 0; text-transform: none; }
+.panel-head .spacer { flex: 1; }
+.panel-body { padding: 10px 14px 14px; }
+.empty { color: var(--muted); font-size: 13px; padding: 10px 2px; }
+
+/* Status dots: the same five meanings everywhere. */
+.sdot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--muted); }
+.sdot.run { background: var(--run); }
+.sdot.wait { background: var(--wait); }
+.sdot.fail { background: var(--fail); }
+.sdot.queue { background: var(--queue); }
+.sdot.live { box-shadow: 0 0 0 0 color-mix(in srgb, var(--run) 55%, transparent); animation: beat 1.8s infinite; }
+@keyframes beat { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--run) 55%, transparent); } 70% { box-shadow: 0 0 0 6px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
+
+/* Rendered Markdown: issue descriptions, comments, transcripts, reports. */
+.prose { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); overflow-wrap: anywhere; }
+.prose h4 { margin: 14px 0 4px; font-size: 13.5px; color: var(--ink); }
+.prose p { margin: 8px 0; }
+.prose ul, .prose ol { margin: 6px 0; padding-left: 20px; }
+.prose code { font-family: var(--mono); font-size: 12px; background: var(--bg-2); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+.prose pre { background: var(--bg-2); border: 1px solid var(--line); border-radius: 7px; padding: 10px; overflow: auto; }
+.prose pre code { border: 0; padding: 0; background: none; }
+.prose a { color: var(--queue); text-decoration: underline; text-underline-offset: 2px; }
+.prose blockquote { margin: 6px 0; padding-left: 10px; border-left: 2px solid var(--line-2); }
+.prose strong { color: var(--ink); font-weight: 600; }
+.tbl { overflow-x: auto; margin: 8px 0; }
+.tbl table { border-collapse: collapse; font-size: 12.5px; min-width: 100%; }
+.tbl th, .tbl td { border-bottom: 1px solid var(--line); padding: 6px 10px 6px 0; text-align: left; vertical-align: top; }
+.tbl th { color: var(--muted); font-weight: 500; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}

@@ -1,0 +1,45 @@
+// Tailnet policy (login.tailscale.com › Access controls › JSON editor) for examples/homelab/README.md.
+// Everything stays open between your own devices, except the test box (tag:testbox), which runs CI code
+// from pull requests and so may only send its stats to the factory. Replace you@example.com, the
+// <host tailnet IP> and the 10.20.0.x addresses with yours before saving.
+{
+	// Only an admin can put a device under tag:testbox.
+	"tagOwners": {
+		"tag:testbox": ["autogroup:admin"],
+	},
+
+	"grants": [
+		// Your own devices (laptop, phone, build PC, the Proxmox host) reach everything, including the
+		// test box (SSH from the laptop).
+		{"src": ["autogroup:member"], "dst": ["*"], "ip": ["*"]},
+
+		// The test box: only the factory's stats port (through the host's 10.20.0.0/24 subnet route).
+		// GitHub and the internet are reached outside Tailscale, so its CI runner is unaffected.
+		{"src": ["tag:testbox"], "dst": ["10.20.0.10/32"], "ip": ["tcp:8080"]},
+	],
+
+	// Tailscale SSH: the default.
+	"ssh": [
+		{
+			"action": "check",
+			"src":    ["autogroup:member"],
+			"dst":    ["autogroup:self"],
+			"users":  ["autogroup:nonroot", "root"],
+		},
+	],
+
+	// Checked on every save: Tailscale refuses the policy if any of these fail.
+	"tests": [
+		{
+			// You can still SSH the test box and reach the host, its web UI and the factory.
+			"src":    "you@example.com",
+			"accept": ["tag:testbox:22", "<host tailnet IP>:22", "<host tailnet IP>:8006", "10.20.0.10:8080"],
+		},
+		{
+			// The test box can report its stats, and nothing else on the tailnet.
+			"src":    "tag:testbox",
+			"accept": ["10.20.0.10:8080"],
+			"deny":   ["<host tailnet IP>:22", "<host tailnet IP>:8006", "10.20.0.1:8006", "10.20.0.10:22"],
+		},
+	],
+}

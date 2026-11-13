@@ -1,0 +1,36 @@
+# Checks for every PR and for main: tests, type check and the dashboard build.
+# Runs on GitHub's machines (ubuntu-latest) by default, which are free for a public repo. The repository
+# variable LINUX_ON_HOMELAB `true` moves the job to the owner's homelab Linux runner (labels self-hosted,
+# linux, homelab: Proxmox LXC 111), for a private copy where hosted runners are refused.
+# Pull requests from forks never run on the self-hosted runner, whatever the variable says: a fork's PR
+# carries code anyone can write, and running it on a persistent machine on the owner's network would hand
+# that machine to them. Those PRs fall back to ubuntu-latest (or wait, if hosted runners are refused).
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Tests, types and web build
+    runs-on: ${{ vars.LINUX_ON_HOMELAB == 'true' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","homelab"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run check
+      - run: npm run build:web

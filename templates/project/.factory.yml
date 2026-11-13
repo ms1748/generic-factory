@@ -1,0 +1,17 @@
+# The factory's settings for this repo (read from the default branch). These are the factory's built-in
+# defaults written out, so you can see and change them; delete a line to fall back to its default.
+# Every lane is dry until you switch it on, on the dashboard's Lanes view.
+
+# timezone: Europe/London        # schedules' time zone (default: the factory's FACTORY_TIMEZONE, else UTC)
+prompt_dir: {{PROMPT_DIR}}       # where the lanes' prompt files live (common.md sits next to them)
+max_open_prs: 0                  # builders stop at this many open `factory` PRs; 0 means no limit
+lanes:
+  # Builders take `ready` cards by their size label; "none" means unsized cards. XL cards are split.
+  - { name: builder,       kind: builder,    model: opus,   sizes: [M, L, none], splits: [XL], schedule: ["09:00", "14:00", "19:00"], prompt: {{PROMPT_DIR}}/builder.md }
+  - { name: small-builder, kind: builder,    model: sonnet, sizes: [S],                       schedule: ["11:00", "16:00"],          prompt: {{PROMPT_DIR}}/builder.md }
+  - { name: maintainer,    kind: maintainer, model: opus,                                     schedule: ["08:00", "17:00"],          prompt: {{PROMPT_DIR}}/maintainer.md }
+  # Off: it files new ideas on its own. Needs an ideas.md prompt before you turn it on.
+  - { name: ideas,         kind: ideas,      model: opus,   enabled: false,                   schedule: ["mon,thu 08:00"],           prompt: {{PROMPT_DIR}}/ideas.md }
+  - { name: security,      kind: security,   model: sonnet,                                   schedule: ["thu 08:00"],               prompt: {{PROMPT_DIR}}/security.md }
+  # No schedule: reviews each ready factory PR. Its guide is built into the factory, plus reviewer.md.
+  - { name: reviewer,      kind: reviewer,   model: sonnet }

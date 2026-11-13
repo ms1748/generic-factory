@@ -1,0 +1,43 @@
+# The factory on any Docker host (docs/deploy.md). First: `mkdir -p data && docker compose build agent`.
+# Then `docker compose up -d --build` starts the dispatcher. Every lane is dry until switched on:
+#   docker compose exec dispatcher node src/main.ts lane small-builder on
+services:
+  dispatcher:
+    build: .
+    env_file: .env
+    restart: unless-stopped
+    command: ["node", "src/main.ts", "serve"]
+    environment:
+      FACTORY_DATA: /app/data
+      FACTORY_HOST_DATA: ${PWD}/data     # agent containers mount the token file from here
+      FACTORY_PORT: "8080"               # dashboard + webhooks
+    ports:
+      # Machine reports and the tunnel reach the dispatcher here (http://<this host>:8080 on your private network). The
+      # dashboard itself needs a Cloudflare Access token or the built-in sign-in even on this port (src/access.ts).
+      # Through the tunnel, Cloudflare Access is required; see src/access.ts.
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data                 # SQLite state, run transcripts, the token file during a run
+      # The dispatcher starts agent containers; the agents themselves never get the socket.
+      - /var/run/docker.sock:/var/run/docker.sock
+    group_add:
+      - ${DOCKER_GID:-991}               # the host's docker group: `getent group docker | cut -d: -f3`
+
+  # Cloudflare Tunnel from your dashboard address to http://dispatcher:8080. Starts once .env has
+  # CLOUDFLARE_TUNNEL_TOKEN and COMPOSE_PROFILES=tunnel (docs/deploy.md, "Reach the dashboard").
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.5
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    depends_on: [dispatcher]
+
+  agent:
+    build:
+      context: ./agent
+      args:
+        TAURI: ${FACTORY_AGENT_TAURI:-0}   # 1: add Rust and Tauri build deps, for projects that need them (.env.example)
+    image: factory-agent
+    profiles: ["build"]   # built here, never started by compose; the dispatcher runs it per job

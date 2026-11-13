@@ -1,0 +1,62 @@
+# GlitchTip (Sentry-compatible crash reports) next to the factory, as its own compose project, so the
+# dashboard's Logs view shows it and the factory's Cloudflare tunnel reaches it as http://glitchtip-web:8000.
+# Nothing is published on the host's network except 127.0.0.1:8001 (for checks from the host itself).
+# .env next to this file holds the secrets (SECRET_KEY, POSTGRES_PASSWORD, made by setup.sh) and your
+# GLITCHTIP_DOMAIN, GLITCHTIP_FROM_EMAIL and GLITCHTIP_INSTANCE_NAME (setup.sh asks for them once).
+name: glitchtip
+
+x-environment: &env
+  DATABASE_URL: postgres://glitchtip:${POSTGRES_PASSWORD}@postgres:5432/glitchtip
+  VALKEY_URL: redis://valkey:6379
+  SECRET_KEY: ${SECRET_KEY}
+  GLITCHTIP_DOMAIN: ${GLITCHTIP_DOMAIN:?set GLITCHTIP_DOMAIN in .env, e.g. https://crash.example.com}
+  DEFAULT_FROM_EMAIL: ${GLITCHTIP_FROM_EMAIL:?set GLITCHTIP_FROM_EMAIL in .env, e.g. crash@example.com}
+  EMAIL_URL: consolemail://          # no mail yet: invites and resets are printed to the log
+  GLITCHTIP_INSTANCE_NAME: ${GLITCHTIP_INSTANCE_NAME:-GlitchTip}
+  ENABLE_USER_REGISTRATION: ${ENABLE_USER_REGISTRATION:-False}
+  ENABLE_ORGANIZATION_CREATION: "False"
+  ENABLE_ADMIN: "False"
+  GLITCHTIP_ENABLE_UPTIME: "False"   # the factory's Systems view already checks the site
+  GLITCHTIP_ENABLE_LOGS: "False"
+  GLITCHTIP_RETENTION_DAYS: "90"
+  CSRF_TRUSTED_ORIGINS: ${GLITCHTIP_DOMAIN}
+
+services:
+  postgres:
+    image: postgres:18
+    command: -c max_locks_per_transaction=512
+    environment:
+      POSTGRES_USER: glitchtip
+      POSTGRES_DB: glitchtip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pg-data:/var/lib/postgresql
+    restart: unless-stopped
+    mem_limit: 512m
+  valkey:
+    image: valkey/valkey:9
+    restart: unless-stopped
+    mem_limit: 128m
+  web:
+    image: glitchtip/glitchtip:6.2.6
+    container_name: glitchtip-web
+    depends_on: [postgres, valkey]
+    environment:
+      <<: *env
+      SERVER_ROLE: all_in_one
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - uploads:/code/uploads
+    networks: [default, factory]
+    restart: unless-stopped
+    mem_limit: 1g
+
+networks:
+  factory:
+    name: factory_default
+    external: true
+
+volumes:
+  pg-data:
+  uploads:

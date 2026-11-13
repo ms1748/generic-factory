@@ -1,0 +1,10 @@
+node_modules/
+.env
+data/
+*.pem
+.claude/
+web/dist/
+# A snapshot of the live dashboard for `npm run dev:web` with FACTORY_FIXTURE (web/dev/mock.js): private data.
+web/dev/*.json
+# The snapshot script's private values (scripts/publish-snapshot.sh): local only, never committed.
+scripts/private-values.txt
