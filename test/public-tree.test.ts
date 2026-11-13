@@ -32,7 +32,9 @@ function leftOut(glob: string): RegExp {
 /** The files the snapshot would publish: tracked and new (not ignored), minus the private paths. */
 function publicFiles(): string[] {
   const listed = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { cwd: root, encoding: "utf8" }).split("\0").filter(Boolean);
-  const paths = readFileSync(join(root, "scripts", "private-paths.txt"), "utf8")
+  // A public copy has no private-paths.txt (the snapshot leaves it out): every file there is public.
+  const list = join(root, "scripts", "private-paths.txt");
+  const paths = (existsSync(list) ? readFileSync(list, "utf8") : "")
     .split(/\r?\n/)
     .map((l) => l.replace(/#.*/, "").trim().replace(/\/+$/, ""))
     .filter(Boolean)
