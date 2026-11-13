@@ -18,11 +18,11 @@ import type { Perf } from "./perf.ts";
 
 const PR_EVENTS = new Set(["issue_comment", "pull_request_review", "pull_request_review_comment"]);
 const MAX_BODY = 5 * 1024 * 1024;
-// The dashboard page, built by `npm run build:web` (Svelte + Vite) into web/dist.
+// The dashboard page, built by `npm run build:web` (React + Vite) into web/dist.
 const WEB = fileURLToPath(new URL("../web/dist/", import.meta.url));
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml",
-  ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json",
+  ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".webmanifest": "application/manifest+json",
 };
 
 export function verifySignature(secret: string, body: Buffer, header: string | undefined): boolean {
@@ -242,6 +242,7 @@ async function handle(o: ServerOptions, secret: string, req: IncomingMessage, re
   const trial = url.pathname.match(/^\/api\/trials\/(\d+)$/);
   if (req.method === "GET" && trial) return send(res, 200, { text: dash.trial(trial[1]) });
   if (req.method === "GET" && url.pathname === "/api/devices") return send(res, 200, await dash.devices());
+  if (req.method === "GET" && url.pathname === "/api/gaming") return send(res, 200, await dash.gaming());
   if (req.method === "GET" && url.pathname === "/api/activity") return send(res, 200, await dash.activity(url.searchParams.get("window") ?? "24h"));
   const issue = url.pathname.match(/^\/api\/issues\/(\d+)$/);
   if (req.method === "GET" && issue) return send(res, 200, await dash.issue(Number(issue[1]), url.searchParams.get("repo") ?? undefined));

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import type { GitHub } from "../src/github.ts";
-import { checkScores, formula, groups, modelName, prScores, recommend, revertTarget, RULES, score, trailerModel, type PrFacts, type Scored } from "../src/scores.ts";
+import { checkScores, factoryEmail, formula, groups, modelName, ownerCommit, prScores, recommend, revertTarget, RULES, score, trailerModel, type PrFacts, type Scored } from "../src/scores.ts";
 import { State } from "../src/state.ts";
 import { useExample } from "./example-install.ts";
 
@@ -57,6 +58,22 @@ test("model names: the commit's co-author line, a model ID or a lane's alias", (
   assert.equal(modelName("claude-opus-5-5"), "Opus 5.5");
   assert.equal(modelName("sonnet"), "Sonnet");
   assert.equal(modelName("Claude Haiku 5.5"), "Haiku 5.5");
+});
+
+test("owner commits: the factory's need the co-author line and the factory's email", () => {
+  // The cases in this repo's history: agents commit under the owner's GitHub account, so the author can't
+  // tell them apart, and the owner's own Claude sessions add the co-author line too.
+  const T = "\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>";
+  const bot = "1+owner@users.noreply.example";
+  const own = (message: string, email: string, parents = 1) => ownerCommit({ message, email, parents }, bot);
+  assert.equal(own("Build it" + T, bot), false, "a builder's commit");
+  assert.equal(own("Build it" + T, "1+OWNER@users.noreply.example"), false, "emails match in any case");
+  assert.equal(own("Tweak the wording", bot), true, "no co-author line: the owner's");
+  assert.equal(own("Fix the markers" + T, "1+laptop@users.noreply.example"), true, "the owner's own Claude session");
+  assert.equal(own("Merge main", "1+laptop@users.noreply.example", 2), false, "merges never count");
+  assert.equal(factoryEmail({ FACTORY_GIT_EMAIL: bot }), bot);
+  assert.equal(factoryEmail({}), "factory@users.noreply.github.com");
+  assert.match(readFileSync("agent/run.sh", "utf8"), /FACTORY_GIT_EMAIL:-factory@users\.noreply\.github\.com\}/, "the same default as agent/run.sh");
 });
 
 test("reverts: GitHub's Revert button, a Revert title, or a revert commit naming the merge commit", () => {
@@ -126,7 +143,7 @@ test("the serve step scores a merged factory PR from GitHub and the runs table, 
   ];
   const routes: Record<string, unknown> = {
     "/repos/owner/app/pulls/12/commits": [
-      { sha: "c1", commit: { message: "Build it" + T }, parents: [{ sha: "p" }] },
+      { sha: "c1", commit: { message: "Build it" + T, author: { email: factoryEmail() } }, parents: [{ sha: "p" }] },
       { sha: "c2", commit: { message: "Merge main" }, parents: [{ sha: "a" }, { sha: "b" }] },
       { sha: "c3", commit: { message: "Tweak the wording" }, parents: [{ sha: "c2" }] },
     ],

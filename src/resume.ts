@@ -5,7 +5,7 @@
 import type { Ctx } from "./dispatch.ts";
 import { budgetBlock, full, pauseForLimit, stopSwitch } from "./dispatch.ts";
 import { ciFeedback, finishedSince, MAX_CI_RESUMES, notStarted, verdict, type CheckRun } from "./ci.ts";
-import { describe, newFeedback, type PrItem } from "./feedback.ts";
+import { authorOf, describe, newFeedback, type PrItem } from "./feedback.ts";
 import { loadConfig } from "./project.ts";
 import { resumePrompt } from "./prompt.ts";
 import { runAgent } from "./runner.ts";
@@ -15,6 +15,7 @@ interface ApiUser {
   login: string;
 }
 interface ApiComment {
+  id: number;
   user: ApiUser | null;
   body: string | null;
   created_at: string;
@@ -111,7 +112,9 @@ async function adoptPulls(ctx: Ctx): Promise<void> {
 
 async function cardItems(ctx: Ctx, card: number): Promise<PrItem[]> {
   const comments = await ctx.gh.all<ApiComment>(`/repos/${ctx.repo}/issues/${card}/comments`);
-  return comments.map((c): PrItem => ({ kind: "card comment", author: c.user?.login ?? "", body: c.body ?? "", at: c.created_at, where: `#${card}` }));
+  const owner = ctx.repo.split("/")[0];
+  const mine = ctx.state.ownerReplies();
+  return comments.map((c): PrItem => ({ kind: "card comment", author: authorOf(c.user?.login, c.id, owner, mine), body: c.body ?? "", at: c.created_at, where: `#${card}` }));
 }
 
 async function prItems(ctx: Ctx, pr: number): Promise<PrItem[]> {
@@ -121,8 +124,10 @@ async function prItems(ctx: Ctx, pr: number): Promise<PrItem[]> {
     ctx.gh.all<ApiLineComment>(`${base}/pulls/${pr}/comments`),
     ctx.gh.all<ApiReview>(`${base}/pulls/${pr}/reviews`),
   ]);
+  const owner = ctx.repo.split("/")[0];
+  const mine = ctx.state.ownerReplies();
   return [
-    ...comments.map((c): PrItem => ({ kind: "comment", author: c.user?.login ?? "", body: c.body ?? "", at: c.created_at })),
+    ...comments.map((c): PrItem => ({ kind: "comment", author: authorOf(c.user?.login, c.id, owner, mine), body: c.body ?? "", at: c.created_at })),
     ...lines.map((c): PrItem => ({ kind: "line comment", author: c.user?.login ?? "", body: c.body ?? "", at: c.created_at, where: `${c.path}${c.line ? ":" + c.line : ""}` })),
     ...reviews
       .filter((r) => r.submitted_at && r.state !== "PENDING")

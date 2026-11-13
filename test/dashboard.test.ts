@@ -84,7 +84,7 @@ test("Cloudflare Access tokens", async () => {
 
 test("issue descriptions render safely", async () => {
   // @ts-ignore: plain JS module from the page
-  const { md } = await import("../web/src/lib/md.js");
+  const { md } = await import("../web/src/lib/md.ts");
   const html: string = md('**Why.** see #23 and [docs](https://x.dev/a)\n<img src=x onerror=alert(1)>\n[bad](javascript:alert(1))\n- [x] done\n- item `code`\n<!-- old-factory -->', "o/r");
   assert.match(html, /<strong>Why\.<\/strong>/);
   assert.match(html, /href="https:\/\/github.com\/o\/r\/issues\/23"/);

@@ -24,7 +24,7 @@ export interface PrFacts {
   reviewerRounds: number;
   /** The owner's comments and reviews on the PR (bare approvals don't count). */
   ownerRounds: number;
-  /** The owner's own commits on the PR (no Claude co-author line, merges left out). */
+  /** The owner's own commits on the PR (see ownerCommit; merges left out). */
   ownerCommits: number;
   /** Lines added plus removed in those commits. */
   ownerLines: number;
@@ -104,6 +104,24 @@ export function modelName(s: string): string {
 export function trailerModel(message: string): string | undefined {
   const m = message.match(/^Co-Authored-By:\s*Claude\b([^<\n]*)</im);
   return m ? (m[1].trim() ? modelName(m[1]) : "Claude") : undefined;
+}
+
+/** The agents' commit email (agent/run.sh sets the same default when FACTORY_GIT_EMAIL is empty). */
+export function factoryEmail(env: Record<string, string | undefined> = process.env): string {
+  return env.FACTORY_GIT_EMAIL || "factory@users.noreply.github.com";
+}
+
+/**
+ * Whether a PR commit is the owner's own change rather than the factory's. Agents commit under the owner's
+ * git identity (FACTORY_GIT_EMAIL), so the GitHub author is the owner on every commit and can't tell them
+ * apart; and the owner's own Claude sessions add the Claude co-author line too. So a commit is the
+ * factory's only when it has the co-author line and the factory's email; anything else is the owner's.
+ * Where the owner commits with that same email, this falls back to the co-author line alone. Merges never
+ * count. Pure.
+ */
+export function ownerCommit(c: { message: string; email: string; parents: number }, factory: string): boolean {
+  if (c.parents >= 2) return false;
+  return !trailerModel(c.message) || c.email.toLowerCase() !== factory.toLowerCase();
 }
 
 /** The builder lane for a size by the project's config, for PRs the runs table doesn't know. */
@@ -224,7 +242,7 @@ export function recommend(rows: Scored[]): string[] {
 
 interface ApiCommit {
   sha: string;
-  commit: { message: string };
+  commit: { message: string; author?: { email?: string } | null };
   parents: { sha: string }[];
 }
 
@@ -251,7 +269,8 @@ export async function prFacts(ctx: Ctx, p: ApiPull & { created_at: string }, lan
     comments.filter((c) => c.user?.login === owner && !isAgent(said(c)) && (c.body ?? "").trim()).length +
     reviews.filter((r) => r.user?.login === owner && !isAgent(said(r)) && !(r.state === "APPROVED" && !(r.body ?? "").trim())).length;
 
-  const own = commits.filter((c) => c.parents.length < 2 && !trailerModel(c.commit.message));
+  const factory = factoryEmail();
+  const own = commits.filter((c) => ownerCommit({ message: c.commit.message, email: c.commit.author?.email ?? "", parents: c.parents.length }, factory));
   let ownerLines = 0;
   for (const c of own) {
     const d = await gh.get<{ stats?: { additions: number; deletions: number } }>(`/repos/${repo}/commits/${c.sha}`);

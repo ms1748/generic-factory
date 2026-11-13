@@ -60,7 +60,7 @@ Getting a shell: `ssh root@<host>`, then `pct exec 110 -- su - factory`.
 git archive --format=tar.gz -o factory.tgz HEAD
 scp factory.tgz root@<host>:/root/
 ssh root@<host> "pct push 110 /root/factory.tgz /home/factory/factory.tgz --user 1000 --group 1000"
-# then, as factory: tar -xzf ~/factory.tgz -C ~/factory && cd ~/factory && docker compose up -d --build
+# then, as factory: rm -rf ~/factory/web/src && tar -xzf ~/factory.tgz -C ~/factory && cd ~/factory && docker compose up -d --build
 ```
 
 Pause on the dashboard first, as deploy.md's "Update" says.

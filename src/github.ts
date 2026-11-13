@@ -105,6 +105,19 @@ export class GitHub {
     return { ok: res.ok, status: res.status, text: await res.text() };
   }
 
+  /** Uploads a file to a release (its `upload_url`, as GitHub gives it) and returns the asset. */
+  async upload(uploadUrl: string, name: string, data: Buffer, type: string): Promise<{ browser_download_url: string }> {
+    const url = `${uploadUrl.replace(/\{.*\}$/, "")}?name=${encodeURIComponent(name)}`;
+    if (!url.startsWith("https://uploads.github.com/")) throw new Error(`not a GitHub upload address: ${url.slice(0, 80)}`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { ...HEADERS, Authorization: `Bearer ${await this.token()}`, "content-type": type },
+      body: new Uint8Array(data),
+    });
+    if (!res.ok) throw new Error(`GitHub ${res.status} uploading ${name}: ${(await res.text()).slice(0, 200)}`);
+    return (await res.json()) as { browser_download_url: string };
+  }
+
   /** The app's own slug (`<slug>[bot]` is its login), or undefined without the app or when GitHub doesn't answer. */
   async appSlug(): Promise<string | undefined> {
     if (!appConfigured()) return undefined;

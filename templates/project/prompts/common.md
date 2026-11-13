@@ -4,9 +4,9 @@
      The rules below marked "(the dispatcher relies on this)" are what the factory's queue reads: change
      them only together with the factory's src/queue.ts. -->
 
-Every factory agent (builders, maintainer, security reviewer, reviewer) follows these rules on top of its
-own prompt in this folder. The dispatcher's starting prompt says which file to follow and which lane
-(model, card sizes) you have. **Reviewing a PR here:** also read `{{PROMPT_DIR}}/reviewer.md`.
+Every factory agent (builders, maintainer, ideas, security reviewer, reviewer) follows these rules on top
+of its own prompt in this folder. The dispatcher's starting prompt says which file to follow and which
+lane (model, card sizes) you have. **Reviewing a PR here:** also read `{{PROMPT_DIR}}/reviewer.md`.
 
 ## The project
 

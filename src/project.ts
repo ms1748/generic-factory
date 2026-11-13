@@ -2,6 +2,7 @@
 import { defaults, fromYaml, type ProjectConfig } from "./config.ts";
 import type { GitHub } from "./github.ts";
 import type { DepIssue } from "./deps.ts";
+import { authorOf } from "./feedback.ts";
 import { isAgent, type Issue, type Pull } from "./queue.ts";
 
 interface ApiIssue {
@@ -13,6 +14,7 @@ interface ApiIssue {
   pull_request?: unknown;
 }
 interface ApiComment {
+  id: number;
   user: { login: string } | null;
   body: string | null;
 }
@@ -51,7 +53,8 @@ export async function loadConfig(gh: GitHub, repo: string): Promise<ProjectConfi
   return file ? fromYaml(repo, Buffer.from(file.content, "base64").toString("utf8")) : defaults(repo);
 }
 
-export async function snapshot(gh: GitHub, repo: string): Promise<Snapshot> {
+/** `forOwner`: comment ids the dispatcher posted for the owner (State.ownerReplies), which answer a card too. */
+export async function snapshot(gh: GitHub, repo: string, forOwner: Set<number> = new Set()): Promise<Snapshot> {
   const [config, issues, apiPulls, recentlyClosed] = await Promise.all([
     loadConfig(gh, repo),
     gh.all<ApiIssue>(`/repos/${repo}/issues?state=open`),
@@ -86,7 +89,7 @@ export async function snapshot(gh: GitHub, repo: string): Promise<Snapshot> {
       .map(async (i) => {
         const comments = await gh.all<ApiComment>(`/repos/${repo}/issues/${i.number}/comments`);
         const last = comments.at(-1);
-        if (last && last.user?.login === owner && !isAgent({ author: owner, body: last.body ?? "" })) answered.add(i.number);
+        if (last && authorOf(last.user?.login, last.id, owner, forOwner) === owner && !isAgent({ author: owner, body: last.body ?? "" })) answered.add(i.number);
       }),
   );
   const pulls = apiPulls.map((p): Pull => ({

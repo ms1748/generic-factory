@@ -12,9 +12,11 @@ import { dependencies } from "./deps.ts";
 import { DONE_DAYS } from "./done.ts";
 import { prScores } from "./scores.ts";
 import { recordFrom, settingsFrom as autoQueueFrom } from "./autoqueue.ts";
-import { devicesView } from "./devices.ts";
+import { devicesView, freshDevices } from "./devices.ts";
+import { ANSWERS, answer, readVars, saveVars, stop as stopGame, type Answer } from "./gaming.ts";
 import { install, needsSetup, saveInstall } from "./install.ts";
 import type { DoneRecord } from "./state.ts";
+import { OWNER_REPLY, ownerReplyBody } from "./feedback.ts";
 import { snapshot, type Snapshot } from "./project.ts";
 import { buildQueue, byPriority, hasMarker, issueOfPull, pickFor, priorityOf, sizeOf } from "./queue.ts";
 import { env } from "./runner.ts";
@@ -49,6 +51,11 @@ export class Dashboard {
     return devicesView(this.ctx);
   }
 
+  /** Settings › Game tests: the game-test workflow's repository variables (gaming.ts). */
+  gaming() {
+    return readVars(this.ctx);
+  }
+
   constructor(ctx: Ctx, requestRun: () => void) {
     this.ctx = ctx;
     this.requestRun = requestRun;
@@ -60,7 +67,7 @@ export class Dashboard {
   /** The GitHub side, at most a minute old (fresh after any control). */
   private async snap(fresh = false): Promise<Snapshot> {
     if (!fresh && this.cached && Date.now() - this.cached.takenAt.getTime() < SNAPSHOT_MS) return this.cached;
-    this.loading ??= snapshot(this.ctx.gh, this.ctx.repo).finally(() => (this.loading = undefined));
+    this.loading ??= snapshot(this.ctx.gh, this.ctx.repo, this.ctx.state.ownerReplies()).finally(() => (this.loading = undefined));
     this.cached = await this.loading;
     return this.cached;
   }
@@ -73,7 +80,7 @@ export class Dashboard {
         const hit = this.others.get(c.repo);
         if (hit && !fresh && Date.now() - hit.at < SNAPSHOT_MS) return { ctx: c, s: hit.s };
         try {
-          const snap = await snapshot(c.gh, c.repo);
+          const snap = await snapshot(c.gh, c.repo, this.ctx.state.ownerReplies());
           this.others.set(c.repo, { at: Date.now(), s: snap });
           return { ctx: c, s: snap };
         } catch {
@@ -179,6 +186,7 @@ export class Dashboard {
       settings: {
         allowCredits: state.allowCredits(),
         autoMerge: state.autoMerge(),
+        shots: state.shotsOn(),
         autoQueue: { ...autoQueueFrom(state.autoQueueSettings()), last: [this.ctx, ...extra.map((x) => x.ctx)].map((c) => ({ repo: c.repo, ...recordFrom(c.state.autoQueueState()).last })).filter((l) => l.at) },
         testBuildDeleteHours: state.testBuildDeleteHours(),
         // The project's test-builds marker and cleanup workflow (.factory.yml `test_builds:`).
@@ -261,7 +269,10 @@ export class Dashboard {
       this.acts.set(window, { at: Date.now(), data });
     }
     const undone = this.ctx.state.undone();
-    return { ...data, actions: data.actions.map(({ undo, ...a }) => ({ ...a, canUndo: Boolean(undo), undone: undone.has(a.id) })) };
+    // The owner's own answers (sent from the Answer view as the app) aren't agent actions.
+    const mine = new Set([...this.ctx.state.ownerReplies()].map((n) => `comment-${n}`));
+    const actions = data.actions.filter((a) => !mine.has(a.id));
+    return { ...data, actions: actions.map(({ undo, ...a }) => ({ ...a, canUndo: Boolean(undo), undone: undone.has(a.id) })) };
   }
 
   private issues = new Map<string, { at: number; data: unknown }>();
@@ -291,7 +302,7 @@ export class Dashboard {
     const data = {
       number: i.number, title: i.title, body: i.body ?? "", state: i.state, created: i.created_at, author: i.user?.login ?? "",
       labels: i.labels.map((l) => l.name), pr: Boolean(i.pull_request),
-      comments: thread.map((t) => ({ ...t, bot: t.author.endsWith("[bot]") || hasMarker(t.body) })),
+      comments: thread.map((t) => ({ ...t, bot: (t.author.endsWith("[bot]") || hasMarker(t.body)) && !t.body.includes(OWNER_REPLY) })),
     };
     this.issues.set(key, { at: Date.now(), data });
     return data;
@@ -444,6 +455,11 @@ export class Dashboard {
       log(`dashboard: auto-merge is now ${body.on === true ? "on" : "off"}`);
       return body.on === true ? "Factory PRs merge by themselves once they pass every check" : "Auto-merge off: factory PRs wait for you to merge them";
     }
+    if (what === "settings" && id === "shots") {
+      state.setShotsOn(body.on === true);
+      log(`dashboard: before/after screenshots are now ${body.on === true ? "on" : "off"}`);
+      return body.on === true ? "Website PRs get before/after screenshots once the reviewer hands them to you" : "Screenshots off";
+    }
     if (what === "settings" && id === "autoqueue") {
       // Any of on, threshold and max; the rest stay as they were.
       const s = autoQueueFrom({ ...autoQueueFrom(state.autoQueueSettings()), ...body });
@@ -482,6 +498,23 @@ export class Dashboard {
       log(`dashboard: install settings saved (${Object.keys(body).join(", ")}); serving ${next.projects.join(", ")}`);
       this.requestRun();
       return "Saved";
+    }
+    if (what === "settings" && id === "gaming") {
+      try {
+        return await saveVars(this.ctx, body);
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
+    }
+    if (what === "gaming" && /^\d{1,15}$/.test(id ?? "") && (ANSWERS.includes(action as Answer) || action === "stop")) {
+      // A game test's Start, Later, Skip or Stop (gaming.ts), on the primary repo's run.
+      try {
+        return action === "stop" ? await stopGame(this.ctx, Number(id)) : await answer(this.ctx, Number(id), action as Answer);
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      } finally {
+        freshDevices();
+      }
     }
     if (what === "settings" && id === "test-builds") {
       const hours = Number(body.hours);
@@ -571,6 +604,31 @@ export class Dashboard {
       this.requestRun();
       log(`dashboard: build ${repo}#${n} now with ${l.name}`);
       return `#${n} will build next (${l.name}, ${l.model})`;
+    }
+    if (what === "cards" && /^\d+$/.test(id ?? "") && action === "answer") {
+      // The owner's answer to a card waiting on them, posted as the app. Its id is saved so the dispatcher counts it as
+      // the owner's: the PR's session resumes (by webhook, or the next poll) and the board shows the card answered.
+      const n = Number(id);
+      const c = this.ctxFor(body.repo);
+      const owner = c.repo.split("/")[0];
+      let text: string;
+      try {
+        text = ownerReplyBody(String(body.text ?? ""), owner);
+      } catch (e) {
+        throw new HttpError(400, (e as Error).message);
+      }
+      const issue = (c === this.ctx ? await this.snap(true) : (await this.otherSnaps(true)).find((x) => x.ctx === c)?.s)?.open.find((i) => i.number === n);
+      if (!issue) throw new HttpError(404, `#${n} isn't an open issue`);
+      if (!issue.labels.includes("needs-owner")) throw new HttpError(409, `#${n} isn't waiting on you any more`);
+      const res = await c.gh.request("POST", `/repos/${c.repo}/issues/${n}/comments`, { body: text });
+      if (!res.ok) throw new HttpError(502, `GitHub ${res.status}: ${res.text.slice(0, 200)}`);
+      state.addOwnerReply((JSON.parse(res.text) as { id: number }).id, c.repo, n);
+      log(`dashboard: answered ${c.repo}#${n} (${text.length} characters)`);
+      this.issues.delete(`${c.repo}#${n}`);
+      this.acts.clear();
+      if (c === this.ctx) await this.snap(true);
+      else this.others.clear();
+      return `Sent to #${n}`;
     }
     if (what === "cards" && /^\d+$/.test(id ?? "") && (action === "hold" || action === "requeue")) {
       const n = Number(id);

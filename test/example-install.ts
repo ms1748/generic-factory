@@ -26,6 +26,7 @@ export const EXAMPLE: Install = {
   reports: { url: "https://crash.example.com", org: "example" },
   legacyMarkers: ["old-factory"],
   perfApp: { ui: "App UI", processes: ["App", "WebView2"] },
+  gamingTest: { workflow: "game-test.yml", askStep: "Ask", start: "factory/game-test/start", later: "factory/game-test/later", skip: "" },
 };
 
 export function useExample(over: Partial<Install> = {}): State {

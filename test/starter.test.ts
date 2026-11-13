@@ -17,6 +17,7 @@ test("the kit is the prompt set plus .factory.yml, filled in for the repo", () =
   assert.deepEqual(files.map((f) => f.path), [
     "docs/factory/prompts/builder.md",
     "docs/factory/prompts/common.md",
+    "docs/factory/prompts/ideas.md",
     "docs/factory/prompts/maintainer.md",
     "docs/factory/prompts/reviewer.md",
     "docs/factory/prompts/security.md",
@@ -24,6 +25,9 @@ test("the kit is the prompt set plus .factory.yml, filled in for the repo", () =
   ]);
   for (const f of files) assert.doesNotMatch(f.content, /\{\{/, `${f.path} has an unfilled {{...}}`);
   assert.match(text("builder.md"), /^# Factory builder \(owner\/app\)/);
+  // The default lanes' prompt files are all in the kit, so a lane switched on has a prompt to start from.
+  for (const l of defaults("owner/app").lanes.filter((l) => l.prompt.endsWith(".md"))) assert.ok(files.some((f) => f.path === l.prompt), `no ${l.prompt}`);
+  assert.match(text("ideas.md"), /\*\*Never add `ready`\*\*/);
   assert.ok(files.filter((f) => f.path.endsWith(".md")).every((f) => placeholders(f.content) > 0), "each prompt marks what to fill in");
   const other = starterFiles("owner/app", "agents");
   assert.equal(other[0].path, "agents/builder.md");

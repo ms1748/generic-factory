@@ -1,4 +1,5 @@
-# The agent image: one Claude Code run per container. Node 22, git, gh and Claude Code, as a non-root user;
+# The agent image: one Claude Code run per container. Node 22, git, gh, Claude Code and
+# Playwright's Chromium (for shots.mjs), as a non-root user;
 # TAURI=1 adds Rust (clippy, rustfmt) and Tauri build deps for projects that need them (docker-compose.yml passes
 # FACTORY_AGENT_TAURI from .env). A project's own tools go in an image built FROM this one
 # (docs/quickstart.md). The dispatcher starts it with a repo-scoped token, CPU and memory limits and a
@@ -18,6 +19,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
  && echo "deb [signed-by=/etc/apt/keyrings/githubcli.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \
  && apt-get update && apt-get install -y --no-install-recommends nodejs gh \
  && rm -rf /var/lib/apt/lists/*
+
+# Before/after screenshots on website PRs (src/shots.ts): Playwright's headless Chromium for shots.mjs,
+# in /opt/shots. The dispatcher runs it in its own container after a review; agents may use it too.
+ARG PLAYWRIGHT_VERSION=1.65.0
+ENV PLAYWRIGHT_BROWSERS_PATH=/opt/shots/browsers
+RUN mkdir -p /opt/shots && cd /opt/shots && echo '{"private":true,"type":"module"}' > package.json \
+ && npm install --no-audit --no-fund --omit=dev "playwright@$PLAYWRIGHT_VERSION" \
+ && npx playwright install --with-deps --only-shell chromium \
+ && rm -rf /var/lib/apt/lists/* /root/.npm
+COPY --chmod=644 shots.mjs /opt/shots/shots.mjs
 
 RUN useradd --create-home --shell /bin/bash agent \
  && install -d -o agent -g agent /work \

@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { createInterface } from "node:readline";
 import type { GitHub } from "./github.ts";
 import { install } from "./install.ts";
+import type { Shot, ShotSpec } from "./shots.ts";
 import type { RateLimit } from "./state.ts";
 import { agentLimits } from "./slots.ts";
 
@@ -193,6 +194,61 @@ export async function runAgent(gh: GitHub, run: AgentRun, log: (line: string) =>
     rateLimit,
     transcript,
   };
+}
+
+/** The screenshot script's time limit: it's meant to take well under a minute. */
+const SHOTS_TIMEOUT_MS = 2 * 60_000;
+
+/**
+ * Runs agent/shots.mjs in a fresh agent container for a reviewer run (src/shots.ts): no clone, no GitHub
+ * token, no Claude, no volumes; only the Access service token, which the script sends to the two preview
+ * hosts and nowhere else. Returns its shots, or one shot with the error when it couldn't run.
+ */
+export async function runShots(runId: number, spec: ShotSpec, log: (line: string) => void): Promise<Shot[]> {
+  const name = `factory-shots-${runId}`;
+  const limits = agentLimits(policy.parallelRuns(), { cpus: env.cpus, memory: env.memory });
+  const args = [
+    "run", "--rm", "--name", name,
+    "--cpus", limits.cpus, "--memory", limits.memory, "--pids-limit", "1024", "--shm-size", "256m",
+    "--cap-drop", "ALL", "--security-opt", "no-new-privileges",
+    "-e", "FACTORY_SHOTS", "-e", "CF_ACCESS_CLIENT_ID", "-e", "CF_ACCESS_CLIENT_SECRET",
+    env.image, "node", "/opt/shots/shots.mjs",
+  ];
+  const child = spawn("docker", args, {
+    env: {
+      PATH: process.env.PATH,
+      FACTORY_SHOTS: JSON.stringify(spec),
+      CF_ACCESS_CLIENT_ID: process.env.CF_ACCESS_CLIENT_ID ?? "",
+      CF_ACCESS_CLIENT_SECRET: process.env.CF_ACCESS_CLIENT_SECRET ?? "",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (d: Buffer) => (stderr = (stderr + d.toString()).slice(-2000)));
+  const closed: Promise<number> = new Promise((r) => {
+    child.on("error", (e) => {
+      stderr += `could not start docker: ${e.message}`;
+      r(127);
+    });
+    child.on("close", (c) => r(c ?? 1));
+  });
+  const timeout = setTimeout(() => {
+    log(`run ${runId}: the screenshots took over ${SHOTS_TIMEOUT_MS / 60_000} minutes; stopping them`);
+    spawn("docker", ["kill", name], { stdio: "ignore" });
+  }, SHOTS_TIMEOUT_MS);
+  const shots: Shot[] = [];
+  for await (const line of createInterface({ input: child.stdout })) {
+    try {
+      const s = JSON.parse(line) as Shot;
+      if (typeof s.page === "string" && typeof s.device === "string" && (s.side === "before" || s.side === "after")) shots.push(s);
+    } catch {
+      // Not a shot line; ignored.
+    }
+  }
+  const code = await closed;
+  clearTimeout(timeout);
+  if (!shots.length) return [{ page: "/", device: "desktop", side: "after", error: (stderr.trim().split("\n").at(-1) || `exit code ${code}`).slice(0, 200) }];
+  return shots;
 }
 
 /** Claude Code's rate_limit_event: the plan's 5-hour and 7-day windows (utilization 0-1, reset time). */

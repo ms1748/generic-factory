@@ -16,7 +16,7 @@ Install the factory's GitHub App on the repo first. The command:
 2. opens a PR (labelled `factory`) that adds what's missing of:
    - `prompts/*.md` here, as `<prompt_dir>/` in the repo (`docs/factory/prompts/` unless its
      `.factory.yml` says otherwise): `common.md` (rules every agent follows), `builder.md`,
-     `maintainer.md`, `security.md` and `reviewer.md`;
+     `maintainer.md`, `ideas.md`, `security.md` and `reviewer.md`;
    - `.factory.yml`: the factory's default lanes written out.
 
    Files the repo already has are left alone. `{{REPO}}` and `{{PROMPT_DIR}}` are filled in for you.

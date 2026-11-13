@@ -1,14 +1,18 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
   <title>Factory</title>
+  <meta name="theme-color" content="#09090b">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <!-- Credentials so the manifest gets through Cloudflare Access like the page does. -->
+  <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
 </head>
 <body>
   <div id="app"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/main.tsx"></script>
 </body>
 </html>

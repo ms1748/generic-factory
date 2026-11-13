@@ -1,7 +1,7 @@
 # The dispatcher. Node 22.18+ runs the TypeScript sources directly (type stripping), so there's no build step.
 FROM docker:29-cli AS docker
 
-# The dashboard page (Svelte), built once here; only its static files reach the final image.
+# The dashboard page (React + Tailwind), built once here; only its static files reach the final image.
 FROM node:22-trixie-slim AS web
 WORKDIR /app
 COPY package.json package-lock.json ./

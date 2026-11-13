@@ -5,7 +5,7 @@
 //   - GitHub says it merges cleanly;
 //   - nobody put needs-owner, hold or factory-stop on it or its card, and auto-merge is on (Settings).
 //     needs-owner on an otherwise mergeable PR gets the owner's-call line below, so it never waits silently.
-// Some changes are always the owner's call, whatever the reviewer says: workflows and secrets (RISKY), and
+// Some changes are always the owner's call, whatever the reviewer says: workflows, secrets and .factory.yml (RISKY), and
 // the paths the install lists on Settings › Install (an app's updater, signing, permissions). Then the card
 // gets `needs-owner` and one line saying why, once per commit. After a merge, done.ts posts the Done line and closes the card.
 import type { Ctx } from "./dispatch.ts";
@@ -19,6 +19,7 @@ import type { MergeCall } from "./state.ts";
  *  the repo's secrets) and secrets or keys. Each project adds its own on Settings › Install (riskyPaths). */
 export const RISKY: { re: RegExp; why: string }[] = [
   { re: /^\.github\/workflows\//, why: "it changes a GitHub workflow (they run with the repo's secrets)" },
+  { re: /^\.factory\.yml$/, why: "it changes .factory.yml (lanes, models and schedules are the owner's call)" },
   { re: /secret|\.env($|\.)|\.(pfx|p12|pem|key|snk)$/i, why: "it touches secrets or keys" },
 ];
 

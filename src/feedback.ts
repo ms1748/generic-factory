@@ -29,6 +29,25 @@ export function newFeedback(items: PrItem[], owner: string, handledAt: string): 
   );
 }
 
+/** The hidden line that ends a reply the dispatcher posted for the owner. Agents' prompts know it (common.md),
+ *  but the dispatcher itself trusts only the comment ids it saved (`authorOf`), since an agent could copy it. */
+export const OWNER_REPLY = "<!-- factory-owner-reply -->";
+/** The longest answer the dashboard sends (GitHub's own limit is 65536). */
+export const MAX_REPLY = 10_000;
+
+/** The comment the dashboard posts as the app for the owner: their words, then who sent them. */
+export function ownerReplyBody(text: string, owner: string): string {
+  const words = text.trim();
+  if (!words) throw new Error("Write an answer first");
+  if (words.length > MAX_REPLY) throw new Error(`Keep it under ${MAX_REPLY} characters`);
+  return `${words}\n\n<sub>${owner}'s answer, sent from the factory dashboard.</sub>\n${OWNER_REPLY}`;
+}
+
+/** Who wrote a comment: the owner when the dispatcher posted it for them (its id is saved), else its account. */
+export function authorOf(login: string | undefined, id: number | undefined, owner: string, forOwner: Set<number>): string {
+  return id !== undefined && forOwner.has(id) ? owner : (login ?? "");
+}
+
 export function describe(items: PrItem[]): string {
   return items
     .map((i) => {

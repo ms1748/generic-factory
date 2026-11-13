@@ -28,12 +28,28 @@ export function fixture(file) {
           { id: "1", shortId: "APP-1", title: "Test report from the setup check", culprit: "", level: "info", kind: "problem", status: "unresolved", count: 1, firstSeen: "2026-11-07T16:31:14Z", lastSeen: "2026-11-07T16:31:14Z", link: "#" },
           { id: "2", shortId: "APP-2", title: "panicked at src/launch.rs:812: index out of bounds", culprit: "app::launch::place", level: "fatal", kind: "crash", status: "unresolved", count: 3, firstSeen: "2026-11-08T10:00:00Z", lastSeen: "2026-11-08T20:00:00Z", link: "#" },
         ] });
+        // A card's thread (the drawer, and the agent's question in the Answer view): made-up words.
+        if (req.url.startsWith("/api/issues/")) return json(res, { number: Number(req.url.match(/\d+/)?.[0]), title: "A card", body: "What the card asks for.", state: "open", labels: ["needs-owner"], pr: false, comments: [
+          { author: "example-factory[bot]", at: new Date(Date.now() - 3 * 3600_000).toISOString(), kind: "comment", body: "🤖 **Factory:** Should the new setting start **on** or **off**?\n\n- On (recommended): it works from the first deploy.\n- Off: nothing changes until you switch it on.\n\n<details><summary>Details</summary>\n\nThe draft PR has both paths built; only the default differs.\n</details>\n\n<!-- factory -->" },
+        ] });
         if (req.url.startsWith("/api/data")) return json(res, sampleData());
+        if (req.method === "GET" && req.url.startsWith("/api/devices")) return json(res, sampleDevices());
+        if (req.method === "GET" && req.url.startsWith("/api/gaming")) return json(res, { workflow: "game-test.yml", repo: "owner/app", vars: { on: true, autoHours: "1-7", limitMin: 60, games: "Example Game" }, error: null });
         if (req.url.startsWith("/api/logs")) return json(res, { containers: [], lines: [] });
         if (req.method === "POST") return json(res, { message: "ok (fixture: nothing changed)" });
         return json(res, {});
       });
     },
+  };
+}
+
+/** A made-up Devices view: one machine with a game test waiting for Start (src/gaming.ts's shape). */
+function sampleDevices() {
+  const ago = (min) => new Date(Date.now() - min * 60_000).toISOString();
+  return {
+    machines: [{ name: "test-pc", role: "Test PC · game tests", now: [], queue: [], recent: [] }],
+    games: [{ run: 1, machine: "test-pc", state: "waiting", step: "Ask", pr: 81, title: "Faster loading", sha: "abc1234", url: "#", at: ago(4), answers: ["start", "later", "skip"] }],
+    error: null,
   };
 }
 

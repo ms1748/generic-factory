@@ -77,6 +77,7 @@ test("risky files and the reviewer's own doubts go to the owner, whatever CI say
   };
   // Built in, in every project:
   assert.match(owner({ files: [".github/workflows/ci.yml"], riskyPaths: [] }), /workflow/);
+  assert.match(owner({ files: [".factory.yml"], riskyPaths: [] }), /\.factory\.yml/);
   assert.match(owner({ files: ["scripts/secrets.mjs"], riskyPaths: [] }), /secrets/);
   assert.match(owner({ files: [".env.example"], riskyPaths: [] }), /secrets/);
   assert.match(owner({ files: ["certs/release.pfx"], riskyPaths: [] }), /keys/);

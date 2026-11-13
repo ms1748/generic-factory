@@ -4,6 +4,7 @@
 // logs, test builds). Read from the jobs of the project's recent workflow runs (the app can't list runners
 // without admin), cached for 15 s.
 import type { Ctx } from "./dispatch.ts";
+import { gameTests, isGameRun, needsPulls, type ApiRun, type GameTest, type OpenPull } from "./gaming.ts";
 import { install, type Machine } from "./install.ts";
 
 /** The CI machines: those with a runner name or labels. */
@@ -108,16 +109,29 @@ export function byMachine(jobs: ApiJob[], artifactsOf: (run: number) => Artifact
   });
 }
 
-let cache: { at: number; repo: string; view: { machines: MachineView[]; error: string | null } } | undefined;
+export interface DevicesView {
+  machines: MachineView[];
+  /** Game tests in progress (src/gaming.ts); each names its machine, or null when none matches. */
+  games: GameTest[];
+  error: string | null;
+}
+
+let cache: { at: number; repo: string; view: DevicesView } | undefined;
+
+/** Forgets the cached view, so the next read shows a change made from the dashboard. */
+export const freshDevices = (): void => void (cache = undefined);
 
 /** The Devices view for the dashboard (GET /api/devices). */
-export async function devicesView(ctx: Ctx, now = Date.now()): Promise<{ machines: MachineView[]; error: string | null }> {
+export async function devicesView(ctx: Ctx, now = Date.now()): Promise<DevicesView> {
   if (cache && cache.repo === ctx.repo && now - cache.at < 15_000) return cache.view;
-  if (!ciMachines().length) return { machines: [], error: null };
+  if (!ciMachines().length && !install().gamingTest.workflow) return { machines: [], games: [], error: null };
   const { gh, repo } = ctx;
   try {
-    const list = async (q: string) => (await gh.get<{ workflow_runs: { id: number }[] }>(`/repos/${repo}/actions/runs?${q}`)).workflow_runs;
-    const runs = [...(await list("status=in_progress&per_page=10")), ...(await list("status=queued&per_page=10")), ...(await list("status=completed&per_page=12"))];
+    const list = async (q: string) => (await gh.get<{ workflow_runs: ApiRun[] }>(`/repos/${repo}/actions/runs?${q}`)).workflow_runs;
+    // The game-test workflow's own runs too: on a busy repo it can be past the first 10 in progress.
+    const { workflow } = install().gamingTest;
+    const games = workflow ? (await gh.get<{ workflow_runs: ApiRun[] }>(`/repos/${repo}/actions/workflows/${encodeURIComponent(workflow)}/runs?status=in_progress&per_page=10`).catch(() => ({ workflow_runs: [] }))).workflow_runs : [];
+    const runs = [...(await list("status=in_progress&per_page=10")), ...games, ...(await list("status=queued&per_page=10")), ...(await list("status=completed&per_page=12"))];
     const ids = [...new Set(runs.map((r) => r.id))];
     const jobs = (await Promise.all(ids.map((id) => gh.get<{ jobs: ApiJob[] }>(`/repos/${repo}/actions/runs/${id}/jobs?per_page=50`).then((r) => r.jobs).catch(() => [])))).flat();
     // Artifacts only for the finished runs the view shows.
@@ -129,18 +143,20 @@ export async function devicesView(ctx: Ctx, now = Date.now()): Promise<{ machine
         arts.set(id, a.artifacts.map((x) => ({ name: x.name, size: x.size_in_bytes, expired: x.expired, url: `https://github.com/${repo}/actions/runs/${id}/artifacts/${x.id}` })));
       }),
     );
-    const view = { machines: byMachine(jobs, (id) => arts.get(id) ?? []), error: null };
+    const pulls = runs.some((r) => r.status === "in_progress" && isGameRun(r, workflow) && needsPulls(r)) ? await gh.all<OpenPull>(`/repos/${repo}/pulls?state=open&per_page=100`).catch(() => []) : [];
+    const view = { machines: byMachine(jobs, (id) => arts.get(id) ?? []), games: gameTests(runs, jobs, pulls), error: null };
     cache = { at: now, repo, view };
     return view;
   } catch (e) {
-    return { machines: ciMachines().map((m) => ({ name: m.name, role: m.role, now: [], queue: [], recent: [] })), error: (e as Error).message };
+    return { machines: ciMachines().map((m) => ({ name: m.name, role: m.role, now: [], queue: [], recent: [] })), games: [], error: (e as Error).message };
   }
 }
 
 /** The same as text, for `node src/main.ts devices`. */
-export function devicesText(v: { machines: MachineView[]; error: string | null }): string {
+export function devicesText(v: { machines: MachineView[]; games?: GameTest[]; error: string | null }): string {
   const out: string[] = [];
   if (v.error) out.push(`(couldn't read CI: ${v.error})`);
+  for (const g of v.games ?? []) out.push(`game test${g.pr ? ` for #${g.pr}` : ""} on ${g.machine ?? "?"}: ${g.state === "waiting" ? "waiting for Start" : `running (${g.step ?? "?"})`}`);
   for (const m of v.machines) {
     out.push(`${m.name}  ${m.role}`);
     for (const j of m.now) {

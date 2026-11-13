@@ -59,6 +59,10 @@ export interface Install {
   /** The Performance view: the fps line of the app's own window, left out when picking a run's main frame
    *  rate ("" for none), and the process lines whose peak memory adds up to the app's memory. */
   perfApp: { ui: string; processes: string[] };
+  /** Game tests on a test machine (src/gaming.ts): the project's workflow file ("" for none: no game test
+   *  controls), the step that waits for the owner's answer, and the commit-status names its Start, Later
+   *  and Skip buttons post as success ("" leaves that button out). */
+  gamingTest: { workflow: string; askStep: string; start: string; later: string; skip: string };
 }
 
 export const DEFAULTS: Install = {
@@ -77,6 +81,7 @@ export const DEFAULTS: Install = {
   reports: { url: "", org: "" },
   legacyMarkers: [],
   perfApp: { ui: "", processes: [] },
+  gamingTest: { workflow: "", askStep: "", start: "", later: "", skip: "" },
 };
 
 const REPO = /^[\w.-]+\/[\w.-]+$/;
@@ -84,6 +89,8 @@ const NAME = /^[a-z0-9][a-z0-9-]{0,30}$/;
 const LABEL = /^[\w.-]{1,40}$/;
 
 const SLUG = /^[a-z0-9][a-z0-9-]{0,38}$/i;
+const WORKFLOW = /^[\w.-]{1,100}\.ya?ml$/;
+const CONTEXT = /^[\w./:-]{1,100}$/;
 const MARKER_NAME = /^[a-z0-9][\w.-]{0,40}$/i;
 const list = (v: unknown): string[] =>
   (Array.isArray(v) ? v.map(String) : typeof v === "string" ? v.split(/[,\n]/) : []).map((s) => s.trim()).filter(Boolean);
@@ -198,6 +205,17 @@ export function parseInstall(raw: unknown): Partial<Install> {
     if (processes.length > 20) throw new Error("perfApp: at most 20 processes");
     for (const x of processes) if (x.length > 80) throw new Error(`perfApp: "${x.slice(0, 40)}..." is too long`);
     out.perfApp = { ui: text(a.ui, 80) ?? "", processes };
+  }
+  if (r.gamingTest !== undefined) {
+    const g = (r.gamingTest ?? {}) as Record<string, unknown>;
+    const workflow = text(g.workflow, 100) ?? "";
+    if (workflow && !WORKFLOW.test(workflow)) throw new Error(`gamingTest: "${workflow}" isn't a workflow file name (like game-test.yml)`);
+    const status = (k: "start" | "later" | "skip") => {
+      const c = text(g[k], 100) ?? "";
+      if (c && !CONTEXT.test(c)) throw new Error(`gamingTest: "${c}" isn't a status name (letters, digits and . / : _ -)`);
+      return c;
+    };
+    out.gamingTest = { workflow, askStep: (text(g.askStep, 80) ?? "").replace(/\s+/g, " "), start: status("start"), later: status("later"), skip: status("skip") };
   }
   return out;
 }

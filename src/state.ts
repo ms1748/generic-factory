@@ -178,6 +178,12 @@ CREATE TABLE IF NOT EXISTS undone (
   id TEXT PRIMARY KEY,
   at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS owner_replies (
+  id INTEGER PRIMARY KEY,
+  repo TEXT NOT NULL,
+  issue INTEGER NOT NULL,
+  at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS devices (
   name TEXT PRIMARY KEY,
   json TEXT NOT NULL,
@@ -486,6 +492,16 @@ export class State {
     this.db.prepare("INSERT OR IGNORE INTO undone (id, at) VALUES (?, ?)").run(id, new Date().toISOString());
   }
 
+  /** GitHub comment ids the dispatcher posted for the owner (the dashboard's Answer view): they count as the
+   *  owner's although the app wrote them. Ids are unique across GitHub, so this list is shared by every repo. */
+  ownerReplies(): Set<number> {
+    return new Set((this.db.prepare("SELECT id FROM owner_replies").all() as { id: number }[]).map((r) => r.id));
+  }
+
+  addOwnerReply(id: number, repo: string, issue: number): void {
+    this.db.prepare("INSERT OR IGNORE INTO owner_replies (id, repo, issue, at) VALUES (?, ?, ?, ?)").run(id, repo, issue, new Date().toISOString());
+  }
+
   /** The PR's head commit whose red CI a run was already sent to fix, and how many CI resumes it has had. */
   ciTried(pr: number): { sha: string; count: number } {
     const [sha = "", count = "0"] = (this.setting(this.key("ci", pr)) ?? "").split(" ");
@@ -568,6 +584,15 @@ export class State {
 
   setAutoMerge(on: boolean): void {
     this.setSetting("auto_merge", on ? "1" : "0");
+  }
+
+  /** Settings › Before/after screenshots (shots.ts): off unless the owner turned it on. */
+  shotsOn(): boolean {
+    return this.setting("shots") === "1";
+  }
+
+  setShotsOn(on: boolean): void {
+    this.setSetting("shots", on ? "1" : "0");
   }
 
   /** When done.ts started watching this repo's merges: PRs merged before then get no Done line. Set once. */

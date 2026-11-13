@@ -18,6 +18,7 @@ import { homelabNotes } from "./prompt.ts";
 import { install, type Install } from "./install.ts";
 import { resume } from "./resume.ts";
 import { runAgent } from "./runner.ts";
+import { postShots } from "./shots.ts";
 
 export interface Verdict {
   verdict: "ready" | "needs-work";
@@ -32,6 +33,8 @@ export interface Verdict {
   mergeOk: boolean;
   /** Why it's the owner's call, when mergeOk is false. */
   mergeWhy: string;
+  /** The site paths whose look the PR changes, for the before/after screenshots (shots.ts). */
+  pages: string[];
 }
 
 /** Automatic "needs work" rounds per PR before the reviewer stops and leaves it to the owner. */
@@ -59,18 +62,21 @@ export const reviewerGuide = (i: Pick<Install, "reviewerCi"> = install()): strin
    common.md rules, and security (no secrets, no keys, no unsafe input handling).
 6. Change nothing on GitHub. End with a short Markdown review (its first line is a one-sentence summary)
    and a JSON verdict: {"verdict": "ready" | "needs-work", "must_fix": [...], "polish": [...], "later": [...],
-   "merge": "ok" | "owner", "merge_why": "..."}.
+   "merge": "ok" | "owner", "merge_why": "...", "pages": [...]}.
    "ready" means nothing must be fixed. "polish" is small and inside the card's scope (an edge case, a
    missing test, a clearer message): the builder does those now. "later" is bigger, for a follow-up card:
    each one becomes an issue, so start it with a short title sentence, then a line on why.
    "merge": "ok" lets the factory merge it by itself once CI is green; say "owner" (and why, in one line)
    if it deletes or rewrites user data or save files, removes or changes a feature people use, or if
-   you're unsure about any part of it.
+   you're unsure about any part of it. "pages": for a website or UI change, up to 3 site paths whose look
+   it changes (e.g. "/", "/download"), most changed first; [] otherwise.
 
 The dispatcher posts the verdict as one short PR comment (the full review folded away), sets the
 factory/review commit status, and resumes the PR's builder session with the must-fix list (at most
 ${MAX_ROUNDS} rounds) or, on "ready", the polish list (once per PR). Each "later" item becomes an \`idea\`
-issue (no duplicates, at most 5 per PR), linked from the comment.`;
+issue (no duplicates, at most 5 per PR), linked from the comment. With Settings › Before/after screenshots
+on, a PR it hands to the owner that touches the website gets a comment with those pages on production and
+on the preview, at desktop and phone width (a script, src/shots.ts).`;
 
 export function reviewerPrompt(repo: string, pr: number, title: string): string {
   return [
@@ -103,7 +109,7 @@ export function parseVerdict(text: string): Verdict | undefined {
   const last = blocks.at(-1);
   if (!last) return undefined;
   try {
-    const j = JSON.parse(last[1]) as { verdict?: string; must_fix?: unknown; polish?: unknown; later?: unknown; nice_to_have?: unknown; merge?: unknown; merge_why?: unknown };
+    const j = JSON.parse(last[1]) as { verdict?: string; must_fix?: unknown; polish?: unknown; later?: unknown; nice_to_have?: unknown; merge?: unknown; merge_why?: unknown; pages?: unknown };
     const list = (v: unknown) => (Array.isArray(v) ? v.map(String).filter(Boolean) : []);
     const mustFix = list(j.must_fix);
     if (j.verdict !== "ready" && j.verdict !== "needs-work") return undefined;
@@ -111,7 +117,7 @@ export function parseVerdict(text: string): Verdict | undefined {
     const verdict = mustFix.length ? "needs-work" : j.verdict;
     const mergeOk = verdict === "ready" && j.merge === "ok";
     const mergeWhy = mergeOk ? "" : typeof j.merge_why === "string" && j.merge_why.trim() ? j.merge_why.trim().slice(0, 300) : "the reviewer didn't say it's safe to merge by itself";
-    return { verdict, mustFix, polish: list(j.polish), later: [...list(j.later), ...list(j.nice_to_have)], review: text.slice(0, last.index).trim(), mergeOk, mergeWhy };
+    return { verdict, mustFix, polish: list(j.polish), later: [...list(j.later), ...list(j.nice_to_have)], review: text.slice(0, last.index).trim(), mergeOk, mergeWhy, pages: list(j.pages) };
   } catch {
     return undefined;
   }
@@ -218,6 +224,8 @@ export async function reviewPr(ctx: Ctx, pr: number, opts: ReviewOptions): Promi
     await gh
       .send("POST", `/repos/${repo}/issues/${pr}/labels`, { labels: [REVIEWED_LABEL] })
       .catch((e) => log(`reviewer: couldn't add the ${REVIEWED_LABEL} label (${(e as Error).message})`));
+
+  if (next === "owner") await postShots(ctx, { number: pr, ref: pull.head.ref }, v.pages, id);
 
   if (session && (next === "fix" || next === "polish")) {
     const items = (xs: string[]) => xs.map((m) => `- ${m}`);

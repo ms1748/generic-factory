@@ -10,7 +10,7 @@ lanes:
   - { name: builder,       kind: builder,    model: opus,   sizes: [M, L, none], splits: [XL], schedule: ["09:00", "14:00", "19:00"], prompt: {{PROMPT_DIR}}/builder.md }
   - { name: small-builder, kind: builder,    model: sonnet, sizes: [S],                       schedule: ["11:00", "16:00"],          prompt: {{PROMPT_DIR}}/builder.md }
   - { name: maintainer,    kind: maintainer, model: opus,                                     schedule: ["08:00", "17:00"],          prompt: {{PROMPT_DIR}}/maintainer.md }
-  # Off: it files new ideas on its own. Needs an ideas.md prompt before you turn it on.
+  # Off: it files new ideas on its own. Fill in ideas.md before you turn it on.
   - { name: ideas,         kind: ideas,      model: opus,   enabled: false,                   schedule: ["mon,thu 08:00"],           prompt: {{PROMPT_DIR}}/ideas.md }
   - { name: security,      kind: security,   model: sonnet,                                   schedule: ["thu 08:00"],               prompt: {{PROMPT_DIR}}/security.md }
   # No schedule: reviews each ready factory PR. Its guide is built into the factory, plus reviewer.md.
